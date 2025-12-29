@@ -1,0 +1,16 @@
+---
+- name: Deploy my.cnf (GTID replication base config)
+  ansible.builtin.template:
+    src: my.cnf.j2
+    dest: /etc/my.cnf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes
+  notify: Restart MySQL
+
+- name: Enable and start MySQL service
+  ansible.builtin.systemd:
+    name: "{{ mysql_service_name | default('mysqld') }}"
+    state: started
+    enabled: yes

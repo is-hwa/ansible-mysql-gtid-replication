@@ -1,0 +1,15 @@
+---
+# Replication user must exist before replica can connect
+
+- name: Primary | Create replication user
+  community.mysql.mysql_user:
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    login_unix_socket: "{{ mysql_unix_socket }}"
+    name: "{{ mysql_repl_user | default('repl_user') }}"
+    password: "{{ mysql_repl_password }}"
+    host: "%"
+    state: present
+    priv: "*.*:REPLICATION SLAVE,REPLICATION CLIENT"
+  become: true
+  no_log: true

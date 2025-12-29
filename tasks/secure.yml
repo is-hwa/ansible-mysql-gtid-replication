@@ -1,0 +1,122 @@
+---
+
+
+# =========================================================
+# 0) 기본값: primary에서 undefined 터지는 것 방지
+# =========================================================
+- name: Default secure skip flag
+  ansible.builtin.set_fact:
+    _skip_secure_tasks: false
+  changed_when: false
+
+# =========================================================
+# 1) ROOT 비밀번호 부트스트랩 (초기/재실행 안전)
+# =========================================================
+- name: Try set root password without password (first-time / best effort)
+  ansible.builtin.command: >
+    mysql --protocol=socket -uroot
+    -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_password }}'; FLUSH PRIVILEGES;"
+  register: root_set_no_pass
+  failed_when: false
+  changed_when: root_set_no_pass.rc == 0
+
+- name: Check root login with configured password via socket
+  ansible.builtin.command: >
+    mysql --protocol=socket -uroot -p'{{ mysql_root_password }}' -e "SELECT 1;"
+  register: root_login_check
+  failed_when: root_login_check.rc != 0
+  changed_when: false
+
+
+- name: Replica | Disable read_only
+  community.mysql.mysql_query:
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    login_unix_socket: "{{ mysql_unix_socket }}"
+    query: "SET GLOBAL read_only = OFF;"
+  when: mysql_role == 'replica'
+  failed_when: false
+  changed_when: false
+
+- name: Replica | Disable super_read_only
+  community.mysql.mysql_query:
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    login_unix_socket: "{{ mysql_unix_socket }}"
+    query: "SET GLOBAL super_read_only = OFF;"
+  when: mysql_role == 'replica'
+
+
+# =========================================================
+# 2) Replica에서 read_only/super_read_only ON이면 "secure 정리 작업만" 스킵
+# =========================================================
+- name: Replica | Check read_only/super_read_only with root password
+  ansible.builtin.command: >
+    mysql --protocol=socket -uroot -p'{{ mysql_root_password }}'
+    -e "SHOW VARIABLES LIKE 'read_only'; SHOW VARIABLES LIKE 'super_read_only';"
+  register: ro_check
+  failed_when: false
+  changed_when: false
+  when: mysql_role == 'replica'
+
+
+- name: Replica | Set secure skip flag (secure tasks only)
+  ansible.builtin.set_fact:
+    _skip_secure_tasks: >-
+      {{
+        (ro_check.rc == 0)
+        and (
+          (ro_check.stdout is search('read_only\\s+ON'))
+          or
+          (ro_check.stdout is search('super_read_only\\s+ON'))
+        )
+      }}
+  changed_when: false
+  when: mysql_role == 'replica'
+
+# =========================================================
+# 3) mysql_secure_installation 성격 작업(멱등)
+#    - replica read_only ON이면 여기만 스킵
+# =========================================================
+- name: Remove remote root accounts (root@'%')
+  community.mysql.mysql_user:
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    login_unix_socket: "{{ mysql_unix_socket }}"
+    name: root
+    host: "%"
+    state: absent
+  when: not _skip_secure_tasks
+  become: true
+
+
+
+- name: Remove anonymous users
+  community.mysql.mysql_user:
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    login_unix_socket: "{{ mysql_unix_socket }}"
+    name: ""
+    host_all: true
+    state: absent
+  when: not _skip_secure_tasks
+  become: true
+
+- name: Remove test database
+  community.mysql.mysql_db:
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    login_unix_socket: "{{ mysql_unix_socket }}"
+    name: test
+    state: absent
+  when: not _skip_secure_tasks
+  become: true
+
+- name: Flush privileges
+  community.mysql.mysql_query:
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    login_unix_socket: "{{ mysql_unix_socket }}"
+    query: "FLUSH PRIVILEGES;"
+  when: not _skip_secure_tasks
+  become: true

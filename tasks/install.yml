@@ -1,0 +1,7 @@
+---
+- name: Install MySQL server
+  ansible.builtin.yum:
+    name:
+      - mysql-server
+      - python3-PyMySQL
+    state: present

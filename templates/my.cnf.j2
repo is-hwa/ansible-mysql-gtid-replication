@@ -1,0 +1,34 @@
+# /etc/my.cnf
+# MySQL 8.0 / CentOS 9
+# 목적: GTID 기반 복제에 필요한 "기반 설정"만 적용 (read_only는 여기서 건드리지 않음)
+
+[mysqld]
+# ===== 기본 =====
+port = {{ mysql_port | default(3306) }}
+bind-address =0.0.0.0
+skip_name_resolve =ON
+
+# ===== 서버 식별(복제 필수) =====
+server-id = {{ mysql_server_id }}
+
+# ===== 바이너리 로그(Primary/Replica 모두 ON 권장) =====
+log_bin = mysql-bin
+binlog_format = ROW
+binlog_row_image = FULL
+sync_binlog =1
+log_replica_updates =ON
+
+# ===== GTID 복제 =====
+gtid_mode =ON
+enforce_gtid_consistency =ON
+
+# ===== Relay log (Replica 안정성) =====
+relay_log = relay-bin
+relay_log_recovery =ON
+
+[mysqld_safe]
+log-error = /var/log/mysqld.log
+pid-file = /var/run/mysqld/mysqld.pid
+
+[client]
+port = {{ mysql_port | default(3306) }}

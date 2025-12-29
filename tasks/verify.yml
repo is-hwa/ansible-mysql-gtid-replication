@@ -1,0 +1,73 @@
+---
+- name: Check if MySQL service is running
+  ansible.builtin.systemd:
+    name: "{{ mysql_service_name | default('mysqld') }}"
+    state: started
+  register: mysql_service_status
+  failed_when: mysql_service_status.status.ActiveState != 'active'
+  changed_when: false
+
+- name: Primary | Check server_id, log_bin, gtid_mode
+  ansible.builtin.command: >
+    mysql --protocol=socket -uroot -p'{{ mysql_root_password }}'
+    -e "SHOW VARIABLES LIKE 'server_id';
+        SHOW VARIABLES LIKE 'log_bin';
+        SHOW VARIABLES LIKE 'gtid_mode';"
+  register: primary_vars
+  failed_when: false
+  changed_when: false
+  when: mysql_role == 'primary'
+  no_log: true
+
+- name: Primary | Assert base settings
+  ansible.builtin.assert:
+    that:
+      - primary_vars.rc == 0
+      - primary_vars.stdout is search("server_id")
+      - primary_vars.stdout is search("log_bin\\s+ON")
+      - primary_vars.stdout is search("gtid_mode\\s+ON")
+  when: mysql_role == 'primary'
+
+- name: Ensure remote root login is disabled
+  ansible.builtin.command: >
+    mysql --protocol=socket -uroot -p'{{ mysql_root_password }}'
+    -e "SELECT user, host FROM mysql.user WHERE user='root' AND host != 'localhost';"
+  register: remote_root_check
+  failed_when: remote_root_check.stdout | length > 0
+  changed_when: false
+  no_log: true
+
+- name: Replica | Show replica status
+  ansible.builtin.command: >
+    mysql --protocol=socket -uroot -p'{{ mysql_root_password }}'
+    -e "SHOW REPLICA STATUS\G"
+  register: replica_status
+  failed_when: false
+  changed_when: false
+  when: mysql_role == 'replica'
+  no_log: true
+
+- name: Replica | Assert replication running (IO/SQL Yes)
+  ansible.builtin.assert:
+    that:
+      - replica_status.rc == 0
+      - replica_status.stdout is search("Replica_IO_Running: Yes")
+      - replica_status.stdout is search("Replica_SQL_Running: Yes")
+  when: mysql_role == 'replica'
+
+- name: Replica | Assert read_only flags
+  ansible.builtin.command: >
+    mysql --protocol=socket -uroot -p'{{ mysql_root_password }}'
+    -e "SHOW VARIABLES LIKE 'read_only'; SHOW VARIABLES LIKE 'super_read_only';"
+  register: replica_ro
+  failed_when: false
+  changed_when: false
+  when: mysql_role == 'replica'
+  no_log: true
+
+- name: Replica | Assert read_only/super_read_only ON
+  ansible.builtin.assert:
+    that:
+      - replica_ro.stdout is search("read_only\\s+ON")
+      - replica_ro.stdout is search("super_read_only\\s+ON")
+  when: mysql_role == 'replica'

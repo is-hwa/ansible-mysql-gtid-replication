@@ -1,0 +1,80 @@
+---
+- name: Replica | Check replica status (to decide reconfigure)
+  ansible.builtin.command: >
+    mysql --protocol=socket -uroot -p'{{ mysql_root_password }}'
+    -e "SHOW REPLICA STATUS\G"
+  register: replica_status
+  failed_when: false
+  changed_when: false
+  no_log: true
+
+- name: Replica | Decide whether to (re)configure replication
+  ansible.builtin.set_fact:
+    _need_repl_reconfigure: >-
+      {{
+        (force_repl_reset | default(false) | bool)
+        or (replica_status.rc != 0)
+        or (replica_status.stdout is not search('Source_Host:'))
+        or (replica_status.stdout is not search('Source_User:'))
+      }}
+  changed_when: false
+
+- name: Replica | Stop replica (only when reconfigure)
+  community.mysql.mysql_query:
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    login_unix_socket: "{{ mysql_unix_socket }}"
+    query: "STOP REPLICA;"
+  when: _need_repl_reconfigure
+  no_log: true
+
+- name: Replica | Reset replica (only when reconfigure)
+  community.mysql.mysql_query:
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    login_unix_socket: "{{ mysql_unix_socket }}"
+    query: "RESET REPLICA ALL;"
+  when: _need_repl_reconfigure
+  no_log: true
+
+- name: Replica | Configure replication source (only when reconfigure)
+  community.mysql.mysql_query:
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    login_unix_socket: "{{ mysql_unix_socket }}"
+    query: |
+      CHANGE REPLICATION SOURCE TO
+        SOURCE_HOST='{{ mysql_primary_host }}',
+        SOURCE_USER='{{ mysql_repl_user | default("repl_user") }}',
+        SOURCE_PASSWORD='{{ mysql_repl_password }}',
+        SOURCE_PORT={{ mysql_repl_port | default(3306) }},
+        SOURCE_AUTO_POSITION=1;
+  when: _need_repl_reconfigure
+  no_log: true
+
+- name: Replica | Start replica (always ensure started)
+  community.mysql.mysql_query:
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    login_unix_socket: "{{ mysql_unix_socket }}"
+    query: "START REPLICA;"
+  no_log: true
+
+# 운영 정책: Replica는 항상 읽기 전용
+- name: Replica | Enable read_only
+  community.mysql.mysql_query:
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    login_unix_socket: "{{ mysql_unix_socket }}"
+    query: "SET GLOBAL read_only = ON;"
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Replica | Enable super_read_only
+  community.mysql.mysql_query:
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    login_unix_socket: "{{ mysql_unix_socket }}"
+    query: "SET GLOBAL super_read_only = ON;"
+  no_log: true

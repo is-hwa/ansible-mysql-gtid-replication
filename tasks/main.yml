@@ -1,0 +1,27 @@
+---
+- name: Install MySQL
+  import_tasks: install.yml
+
+- name: Configure MySQL
+  import_tasks: config.yml
+
+- name: Secure MySQL
+  import_tasks: secure.yml
+
+# (1) repl 유저는 replication 전에
+- name: Configure replication user on Primary
+  import_tasks: repl_user.yml
+  when: mysql_role == 'primary'
+
+# (2) replica는 먼저 붙인다
+- name: Configure replication on Replica
+  import_tasks: replication_replica.yml
+  when: mysql_role == 'replica'
+
+# (3) app DB/유저는 replication 이후에 primary에서 생성(자동복제)
+- name: Configure app db/users on Primary
+  import_tasks: app_users.yml
+  when: mysql_role == 'primary'
+
+- name: Verify replication
+  import_tasks: verify.yml
