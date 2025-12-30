@@ -1,22 +1,23 @@
-# Ansible Role: MySQL Primary-Replica Setup
-
+Ansible Role: MySQL Primary-Replica Setup
 이 프로젝트는 Ansible을 이용하여 MySQL 8.0 기반의 Primary-Replica(Master-Slave) 환경을 자동 구축하는 Role입니다. GTID 기반의 복제 방식을 채택하였으며, 초기 보안 설정 및 운영 정책(Read-only)이 포함되어 있습니다.
 
-## 1. 주요 기능
-- MySQL 8.0 설치 및 `my.cnf` 최적화 (GTID 복제 설정 포함)
-- 초기 보안 설정 (Root 비밀번호 변경, 원격 Root 접속 차단, 익명 사용자 및 테스트 DB 제거)
-- Primary-Replica 복제 자동 구성
-- Replica 서버의 `read_only` 및 `super_read_only` 강제 적용
-- 애플리케이션 전용 데이터베이스 및 계정 생성
+1. 주요 기능
+MySQL 8.0 설치 및 my.cnf 최적화 (GTID 복제 설정 포함)
 
-## 2. 아키텍처 구조
+초기 보안 설정 (Root 비밀번호 변경, 원격 Root 접속 차단, 익명 사용자 및 테스트 DB 제거)
 
+Primary-Replica 복제 자동 구성
 
-- **Primary**: 읽기/쓰기 허용, 바이너리 로그 생성 주체.
-- **Replica**: 읽기 전용 설정, Primary의 데이터를 실시간 동기화.
+Replica 서버의 read_only 및 super_read_only 강제 적용
 
-## 3. 역할 구조 (Role Structure)
-```text
+애플리케이션 전용 데이터베이스 및 계정 생성
+
+2. 아키텍처 구조
+Primary: 쓰기/읽기 허용, 바이너리 로그 생성 주체.
+
+Replica: 읽기 전용 설정, Primary의 데이터를 실시간 동기화.
+
+3. 역할 구조 (Role Structure)
 roles/mysql_setup/
 ├── defaults/main.yml        # 기본 변수 정의
 ├── tasks/
@@ -30,9 +31,8 @@ roles/mysql_setup/
 │   └── verify.yml           # 최종 상태 검증
 └── templates/
     └── my.cnf.j2            # MySQL 설정 템플릿 (GTID 기반)
-
 4. 설정 및 실행
-인벤토리 구성
+인벤토리 구성 예시
 db_primary와 db_replica 그룹을 통해 서버 역할을 정의합니다.
 
 Ini, TOML
@@ -61,7 +61,7 @@ Bash
 ansible-playbook -i inventory.ini mysql_playbook.yml --ask-vault-pass
 5. 트러블슈팅 및 설계 결정 사항
 SQL Multi-statement 실행 오류 해결
-community.mysql.mysql_query 모듈을 사용하여 복제 설정(STOP, RESET, CHANGE SOURCE 등)을 단일 쿼리로 실행할 때, 환경에 따라 1064 문법 에러가 발생하는 이슈를 확인했습니다.
+community.mysql.mysql_query 모듈을 사용하여 복제 설정(STOP, RESET, CHANGE SOURCE 등)을 단일 쿼리로 실행할 때, 특정 환경에서 1064 문법 에러가 발생하는 이슈를 확인했습니다.
 
 해결: 각 복제 설정 단계를 개별 태스크로 분리하여 실행함으로써 모듈의 Multi-statement 처리 제약 문제를 해결하고 안정성을 확보했습니다.
 
