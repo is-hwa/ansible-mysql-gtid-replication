@@ -51,6 +51,7 @@ db_replica
 
 ### 변수 관리
 민감한 정보는 `group_vars/db/vault.yml`에 정의하고 Ansible Vault를 통해 암호화하여 관리합니다.
+(이 repo는 ansible-role의 일부분이기 때문에 사용하려면 상위 폴더에 따로 vars파일을 생성해 그곳에 암호, primary, replica 설정을 따로 해야 role이 안정적으로 굴러갑니다.)
 
 - **mysql_root_password**: Root 계정 비밀번호
 - **mysql_repl_password**: 복제 계정 비밀번호
@@ -83,3 +84,4 @@ Replica 서버에서 계정을 수동으로 먼저 생성한 후 Primary에서 �
 - GTID 모드 활성화 및 server_id 일치 여부
 - Replica 서버의 Replica_IO_Running 및 Replica_SQL_Running 상태 (Yes/Yes)
 - Replica 서버의 read_only 적용 여부
+
